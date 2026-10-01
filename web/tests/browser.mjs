@@ -1,0 +1,86 @@
+import { chromium, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { createServer } from 'node:http';
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { resolve, extname } from 'node:path';
+import { decodeFunctionData, decodeAbiParameters, parseAbi, parseAbiParameters } from 'viem';
+import { mockChain, installMocks, account, unit } from './mock-chain.mjs';
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const report={checkedAt:new Date().toISOString(),browser:'Chromium / Playwright',productionSubpath:'/preview/',tests:[],viewports:[],consoleErrors:[],resourceFailures:[],axe:[],contrast:[]};
+const server=createServer(async(req,res)=>{
+ try{const path=new URL(req.url,'http://localhost').pathname;if(!path.startsWith('/preview/')){res.writeHead(404).end();return;}const file=resolve(root,'dist',path.slice(9)||'index.html');if(!file.startsWith(resolve(root,'dist')+'/'))throw Error('bad path');const bytes=await readFile(file);const type={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml'}[extname(file)];res.writeHead(200,{'Content-Type':type??'application/octet-stream'}).end(bytes);}catch{res.writeHead(404).end();}
+});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+const url=`http://127.0.0.1:${server.address().port}/preview/`;
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+let page;
+async function scenario(name,fn){const context=await browser.newContext({viewport:{width:1440,height:1100}});page=await context.newPage();page.setDefaultTimeout(12000);const mock=mockChain();await installMocks(page,mock);try{await page.goto(url);await expect(page.getByText('Live from block',{exact:false})).toBeVisible();await fn(page,mock);report.tests.push({name,status:'passed'});console.log('PASS',name);}catch(e){console.error('PAGE:',await page.locator('body').innerText());console.error('WALLET:',JSON.stringify(mock.state.calls));await page.screenshot({path:'/tmp/vault-stake-browser-failure.png',fullPage:true});report.tests.push({name,status:'failed',error:e.message});throw e;}finally{await context.close();}}
+async function connect(p){await p.locator('header').getByRole('button',{name:'Connect wallet'}).click();await expect(p.getByRole('button',{name:'Disconnect'})).toBeVisible();await expect(p.getByText('Staked balance')).toBeVisible();await expect(p.locator('.position-values dd').first()).toContainText('100');}
+async function done(p){await expect(p.getByRole('status').filter({hasText:'Transaction confirmed.'})).toBeVisible({timeout:20000});}
+const mainButton=p=>p.locator('button.primary');
+try{
+ await scenario('static subpath, disconnected, desktop/mobile reflow, accessibility, keyboard and reduced motion',async(p,m)=>{
+  p.on('pageerror',e=>report.consoleErrors.push(e.message));p.on('requestfailed',r=>report.resourceFailures.push({url:r.url(),error:r.failure()?.errorText}));
+  await expect(mainButton(p)).toHaveText(/Connect wallet/);await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeDisabled();
+  for(const width of [1440,768,390,320]){
+   await p.setViewportSize({width,height:1000});
+   const overflow=await p.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));expect(overflow.scroll).toBeLessThanOrEqual(overflow.viewport);report.viewports.push({width,height:1000,...overflow});
+   const scan=await new AxeBuilder({page:p}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();report.axe.push({width,violations:scan.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>n.target)}))});expect(scan.violations).toEqual([]);
+   if(width!==768)await p.screenshot({path:`${root}docs/evidence/mock-${width}.jpg`,fullPage:true,type:'jpeg',quality:82});
+  }
+  await p.setViewportSize({width:1440,height:1000});await p.goto(url);await expect(p.getByText('Live from block',{exact:false})).toBeVisible();await p.keyboard.press('Tab');await expect(p.getByRole('link',{name:'Skip to content'})).toBeFocused();await p.keyboard.press('Enter');await p.keyboard.press('Tab');expect(await p.evaluate(()=>document.activeElement?.textContent)).toContain('Refresh');
+  await p.screenshot({path:root+'docs/evidence/keyboard-focus.jpg',type:'jpeg',quality:82});
+  await p.emulateMedia({reducedMotion:'reduce'});expect(await p.locator('button.primary').evaluate(e=>getComputedStyle(e).transitionDuration)).toBe('0s');
+  await p.evaluate(()=>document.documentElement.style.fontSize='200%');expect(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await p.evaluate(()=>document.documentElement.style.fontSize='');
+  const colors=await p.evaluate(()=>['body','.position-panel','.primary','.muted','.context-box'].map(selector=>{const e=document.querySelector(selector),s=getComputedStyle(e);let parent=e,background=s.backgroundColor;while((background==='rgba(0, 0, 0, 0)'||background==='transparent')&&parent.parentElement){parent=parent.parentElement;background=getComputedStyle(parent).backgroundColor;}return {selector,color:s.color,background};}));report.computedColors=colors;
+  const lum=color=>{const c=color.match(/[\d.]+/g).slice(0,3).map(Number).map(n=>{const s=n/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4;});return .2126*c[0]+.7152*c[1]+.0722*c[2];};
+  const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+  report.contrast=[{pair:'body on page',ratio:ratio(colors[0].color,colors[0].background)},{pair:'muted on position surface',ratio:ratio(colors[3].color,colors[1].background)},{pair:'primary button',ratio:ratio(colors[2].color,colors[2].background)}];
+  for(const pair of report.contrast)expect(pair.ratio).toBeGreaterThanOrEqual(4.5);
+ });
+ await scenario('keyboard completes connect, approval and stake without a pointer',async(p,m)=>{
+  const tabTo=async locator=>{for(let i=0;i<40;i++){await p.keyboard.press('Tab');if(await locator.evaluate(e=>e===document.activeElement))return;}throw Error('Keyboard target was unreachable');};
+  await tabTo(p.locator('header').getByRole('button',{name:'Connect wallet'}));await p.keyboard.press('Enter');await expect(p.getByRole('button',{name:'Disconnect'})).toBeVisible();await expect(p.locator('.position-values dd').first()).toContainText('100');
+  await tabTo(p.getByLabel('Amount VSTK'));await p.keyboard.type('2');await tabTo(p.getByLabel('I understand that my entire stake'));await p.keyboard.press('Space');await tabTo(mainButton(p));await p.keyboard.press('Enter');await done(p);await expect(mainButton(p)).toHaveText(/Stake tokens/);await mainButton(p).focus();await p.keyboard.press('Enter');await done(p);expect(m.state.stake).toBe(102n*unit);
+ });
+ await scenario('tampered implementation ABI fails closed before wallet actions',async(p,m)=>{
+  await p.route('**/abi/LaunchToken.json',route=>route.fulfill({contentType:'application/json',body:'[]'}));await p.reload();await expect(p.getByRole('alert')).toContainText('ABI verification failed');await expect(p.getByRole('button',{name:'Reload deployment'})).toBeVisible();expect(m.state.transactions).toHaveLength(0);
+ });
+ await scenario('missing wallet and rejected connection recover',async(p,m)=>{
+  m.state.rejectConnect=true;await p.locator('header').getByRole('button',{name:'Connect wallet'}).click();await expect(p.getByRole('alert')).toContainText('Request rejected');m.state.rejectConnect=false;await connect(p);await p.getByRole('button',{name:'Disconnect'}).click();await p.evaluate(()=>delete window.ethereum);await mainButton(p).click();await expect(p.getByRole('alert')).toContainText('No browser wallet found');
+ });
+ await scenario('wrong chain offers exact add-chain fallback and recovers',async(p,m)=>{
+  m.state.chain='0x1';m.state.unknownChain=true;await connect(p);await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeDisabled();await expect(p.getByRole('button',{name:'Switch to Sepolia'})).toHaveCount(1);await mainButton(p).click();await expect(p.locator('.warning')).toHaveCount(0);expect(m.state.calls.filter(x=>x.method==='wallet_addEthereumChain')[0].params[0]).toEqual(m.manifest.walletAddChain);expect(m.state.calls.filter(x=>x.method==='wallet_switchEthereumChain')).toHaveLength(2);
+ });
+ await scenario('approval stays pending through receipt; stake relocks all; claim stays available',async(p,m)=>{
+  await connect(p);await p.getByLabel('Amount VSTK').fill('10');await p.getByLabel('I understand that my entire stake').check();await expect(mainButton(p)).toHaveText(/Approve VSTK/);m.state.holdReceipt=true;await mainButton(p).click();await expect(p.getByRole('status')).toContainText('Waiting for confirmation');await expect(mainButton(p)).toBeDisabled();expect(m.state.transactions).toHaveLength(1);m.state.holdReceipt=false;await done(p);await expect(mainButton(p)).toHaveText(/Stake tokens/);await mainButton(p).click();await done(p);expect(m.state.stake).toBe(110n*unit);await p.getByRole('button',{name:'Withdraw',exact:true}).click();await p.getByLabel('Amount VSTK').fill('1');await expect(mainButton(p)).toBeDisabled();await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeEnabled();await p.getByRole('button',{name:'Claim rewards',exact:true}).click();await done(p);expect(m.state.earned).toBe(0n);await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeDisabled();
+ });
+ await scenario('withdraw and exit return principal and earned rewards',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Withdraw',exact:true}).click();await p.getByLabel('Amount VSTK').fill('25');await mainButton(p).click();await done(p);expect(m.state.stake).toBe(75n*unit);await p.getByRole('button',{name:'Withdraw all + claim rewards'}).click();await done(p);expect(m.state.stake).toBe(0n);expect(m.state.earned).toBe(0n);
+ });
+ await scenario('funding validates minimum, consent, exact approval and separate contribution',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Fund rewards',exact:true}).click();await p.getByLabel('Contribution VSTK').fill('1');await p.getByLabel('I understand this contribution').check();await expect(mainButton(p)).toBeDisabled();await expect(p.locator('#amount-error')).toContainText('at least');await p.getByLabel('Contribution VSTK').fill('1000');await mainButton(p).click();await done(p);expect(m.state.allowance).toBe(1000n*unit);await mainButton(p).click();await done(p);expect(m.state.totalFunded).toBe(4000n*unit);
+ });
+ await scenario('wallet rejection, simulated revert and reverted receipt never report success',async(p,m)=>{
+  await connect(p);m.state.rejectSend=true;await p.getByRole('button',{name:'Claim rewards',exact:true}).click();await expect(p.getByRole('alert')).toContainText('Request rejected');expect(m.state.transactions).toHaveLength(0);m.state.rejectSend=false;m.state.revert=true;await p.getByRole('button',{name:'Claim rewards',exact:true}).click();await expect(p.getByRole('alert')).toContainText('no rewards to claim');expect(m.state.transactions).toHaveLength(0);m.state.revert=false;m.state.receiptStatus='0x0';await p.getByRole('button',{name:'Claim rewards',exact:true}).click();await expect(p.getByRole('alert')).toContainText('reverted on chain');expect(m.state.earned).toBe(3n*unit);
+ });
+ await scenario('native buy quotes without signing; swap carries exact pool and ETH value',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Swap',exact:true}).click();await expect(p.locator('.token-badge')).toContainText('ETH');await p.getByLabel('You pay ETH').fill('0.01');await mainButton(p).click();await expect(mainButton(p)).toHaveText(/Confirm swap/);expect(m.state.transactions).toHaveLength(0);const scan=await new AxeBuilder({page:p}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();report.axe.push({state:'connected swap quote',violations:scan.violations.map(v=>v.id)});expect(scan.violations).toEqual([]);await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:root+'docs/evidence/mock-swap.jpg',type:'jpeg',quality:82,fullPage:true});await mainButton(p).click();await done(p);expect(m.state.transactions).toHaveLength(1);const tx=m.state.transactions[0];expect(tx.to.toLowerCase()).toBe(m.manifest.network.uniswapV4.universalRouter);expect(BigInt(tx.value)).toBe(unit/100n);
+  const {args}=decodeFunctionData({abi:parseAbi(['function execute(bytes commands,bytes[] inputs,uint256 deadline) payable']),data:tx.data});expect(args[0]).toBe('0x10');const [actions,params]=decodeAbiParameters(parseAbiParameters('bytes,bytes[]'),args[1][0]);expect(actions).toBe('0x060c0f');const [swap]=decodeAbiParameters(parseAbiParameters('((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 amountIn,uint128 amountOutMinimum,bytes hookData)'),params[0]);for(const k of Object.keys(m.manifest.poolKey))expect(String(swap.poolKey[k]).toLowerCase()).toBe(String(m.manifest.poolKey[k]).toLowerCase());expect(swap.amountOutMinimum).toBe(199n*unit/10000n);
+ });
+ await scenario('token sell requires two distinct approvals and then a zero-value swap',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Swap',exact:true}).click();await p.getByRole('button',{name:'Sell VSTK'}).click();await expect(p.locator('.token-badge')).toContainText('VSTK');await p.getByLabel('You pay VSTK').fill('10');await mainButton(p).click();await expect(mainButton(p)).toHaveText(/Approve Permit2/);await mainButton(p).click();await done(p);await expect(mainButton(p)).toHaveText(/Authorize router/);await mainButton(p).click();await done(p);await expect(mainButton(p)).toHaveText(/Confirm swap/);await mainButton(p).click();await done(p);expect(m.state.transactions).toHaveLength(3);expect(m.state.transactions[1].to.toLowerCase()).toBe(m.manifest.network.uniswapV4.permit2);expect(BigInt(m.state.transactions[2].value??'0x0')).toBe(0n);
+ });
+ await scenario('failed and dust quotes cannot submit a swap',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Swap',exact:true}).click();await p.getByLabel('You pay ETH').fill('0.01');m.state.quoteFail=true;await mainButton(p).click();await expect(p.getByRole('alert')).toBeVisible();expect(m.state.transactions).toHaveLength(0);m.state.quoteFail=false;m.state.tinyQuote=true;await mainButton(p).click();await expect(p.getByText('This quote is too small',{exact:false})).toBeVisible();await expect(mainButton(p)).toBeDisabled();expect(m.state.transactions).toHaveLength(0);
+ });
+ await scenario('quote expiry, slippage validation, input and account changes invalidate quotes',async(p,m)=>{
+  await connect(p);await p.getByRole('button',{name:'Swap',exact:true}).click();await p.getByLabel('You pay ETH').fill('0.01');await p.getByLabel('Slippage tolerance').fill('9');await expect(mainButton(p)).toBeDisabled();await p.getByLabel('Slippage tolerance').fill('0.5');await mainButton(p).click();await expect(mainButton(p)).toHaveText(/Confirm swap/);await p.clock.install();await p.clock.fastForward(31000);await expect(mainButton(p)).toHaveText(/Get quote/);await p.getByLabel('You pay ETH').fill('0.02');await mainButton(p).click();await expect(mainButton(p)).toHaveText(/Confirm swap/);await p.evaluate(()=>window.ethereum.emit('accountsChanged',[]));await expect(mainButton(p)).toHaveText(/Connect wallet/);expect(m.state.transactions).toHaveLength(0);
+ });
+ await scenario('RPC failure and empty code fail closed, refresh restores controls',async(p,m)=>{
+  await connect(p);m.state.zeroCode=true;await p.getByRole('button',{name:'Refresh data'}).click();await expect(p.getByRole('alert')).toContainText('no code');await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeDisabled();m.state.zeroCode=false;await p.getByRole('button',{name:'Refresh data'}).click();await expect(p.getByRole('alert')).toHaveCount(0);m.state.rpcFail=true;await p.getByRole('button',{name:'Refresh data'}).click();await expect(p.getByRole('alert')).toBeVisible();await expect(p.getByRole('button',{name:'Claim rewards',exact:true})).toBeDisabled();m.state.rpcFail=false;await p.getByRole('button',{name:'Refresh data'}).click();await expect(p.getByRole('alert')).toHaveCount(0);
+ });
+ const context=await browser.newContext({viewport:{width:1440,height:1100}});page=await context.newPage();page.on('pageerror',e=>report.consoleErrors.push(e.message));page.on('requestfailed',r=>report.resourceFailures.push({url:r.url(),error:r.failure()?.errorText}));await page.goto(url);await expect(page.getByText('Live from block',{exact:false})).toBeVisible({timeout:45000});await page.screenshot({path:root+'docs/evidence/live-desktop.jpg',fullPage:true,type:'jpeg',quality:85});report.tests.push({name:'unmocked browser public-RPC reads and production resources',status:'passed'});report.liveReadText=await page.locator('.read-status').innerText();await context.close();expect(report.consoleErrors).toEqual([]);expect(report.resourceFailures).toEqual([]);
+}catch(e){console.error(e);process.exitCode=1;}
+finally{await writeFile(root+'docs/evidence/browser-results.json',JSON.stringify(report,null,2)+'\n');await browser.close();await new Promise(resolve=>server.close(resolve));}

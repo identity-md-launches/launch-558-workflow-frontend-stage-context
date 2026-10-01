@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-10-01T07:14:54.539944+00:00",
+  "scope": "web/**, dist/**, docs/**, explicitly allowed web/.gitignore",
+  "protectedTrackedFilesChanged": [],
+  "outOfScopeFiles": [],
+  "dependencyOrCacheFiles": [],
+  "submodules": [],
+  "whitespaceFindings": [],
+  "newFileCount": 43,
+  "existingTrackedPayloadBytes": 3176042,
+  "existingGitPackBytes": 692773,
+  "newPayloadBytesExcludingThisReport": 1617792,
+  "exportBytesIncludingManifest": 527111,
+  "exportAssets": 7,
+  "submissionLimitBytes": 8388608,
+  "gitCommitCreated": false,
+  "gitCommitBlocker": "git add failed: .git/index.lock cannot be created on a read-only filesystem.",
+  "gitBundleMeasured": false,
+  "sizeMethod": "Conservative content budget: all current tracked bytes + all new deliverable bytes + existing compressed Git history + 1 MiB reserve for Git metadata. This is a bound for review, not a fabricated Git bundle measurement.",
+  "conservativeSizeBudgetBytes": 6535183
+}

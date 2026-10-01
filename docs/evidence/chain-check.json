@@ -1,0 +1,72 @@
+{
+  "checkedAt": "2026-10-01T07:06:28.772Z",
+  "chainId": 11155111,
+  "endpoint": "https://ethereum-sepolia-rpc.publicnode.com",
+  "transactionsSent": 0,
+  "contracts": [
+    {
+      "name": "LaunchToken",
+      "address": "0x03571ed111e77f611b58d3a51e512cc56146d8e8",
+      "runtimeBytes": 1753
+    },
+    {
+      "name": "StakingVault",
+      "address": "0xd1c23976a393348cc4491c4ad6faa7c82704aa54",
+      "runtimeBytes": 4212
+    }
+  ],
+  "reads": {
+    "LaunchToken.symbol": "VSTK",
+    "LaunchToken.decimals": "18",
+    "LaunchToken.totalSupply": "1000000000000000000000000000",
+    "StakingVault.token": "0x03571ed111E77f611B58d3A51e512CC56146D8E8",
+    "StakingVault.totalStaked": "0",
+    "StakingVault.aprWad": "0",
+    "StakingVault.rewardRate": "0",
+    "StakingVault.periodFinish": "0",
+    "StakingVault.minimumFunding": "1000000000000000000000",
+    "StakingVault.rewardsDuration": "2592000",
+    "StakingVault.LOCK_DURATION": "604800"
+  },
+  "errors": [],
+  "rpcChainId": 11155111,
+  "block": 11820217,
+  "blockTime": "2026-10-01T07:06:24.000Z",
+  "uniswap": {
+    "poolManager": {
+      "address": "0xe03a1074c86cfedd5c142c4f04f1a1536e203543",
+      "runtimeBytes": 24009
+    },
+    "universalRouter": {
+      "address": "0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b",
+      "runtimeBytes": 19540
+    },
+    "quoter": {
+      "address": "0x61b3f2011a92d183c7dbadbda940a7555ccf9227",
+      "runtimeBytes": 5820
+    },
+    "stateView": {
+      "address": "0xe1dd9c3fa50edb962e442f60dfbc432e24537e4c",
+      "runtimeBytes": 3531
+    },
+    "positionManager": {
+      "address": "0x429ba70129df741b2ca2a85bc3a2a3328e5c09b4",
+      "runtimeBytes": 23877
+    },
+    "permit2": {
+      "address": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+      "runtimeBytes": 9152
+    }
+  },
+  "pool": {
+    "poolId": "0xbcc5bf83f8b8cf1199ef50ac44e8cf5611f560d663006a5d0999195dcf66a9dd",
+    "sqrtPriceX96": "560227709747861399187319382274582",
+    "tick": 177284,
+    "lpFee": 12500,
+    "readOnlyQuote": {
+      "amountIn": "1000000000000",
+      "amountOut": "49157255177983259368",
+      "gasEstimate": "87334"
+    }
+  }
+}

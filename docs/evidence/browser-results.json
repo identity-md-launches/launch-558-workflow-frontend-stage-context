@@ -1,0 +1,159 @@
+{
+  "checkedAt": "2026-10-01T07:11:17.289Z",
+  "browser": "Chromium / Playwright",
+  "productionSubpath": "/preview/",
+  "tests": [
+    {
+      "name": "static subpath, disconnected, desktop/mobile reflow, accessibility, keyboard and reduced motion",
+      "status": "passed"
+    },
+    {
+      "name": "keyboard completes connect, approval and stake without a pointer",
+      "status": "passed"
+    },
+    {
+      "name": "tampered implementation ABI fails closed before wallet actions",
+      "status": "passed"
+    },
+    {
+      "name": "missing wallet and rejected connection recover",
+      "status": "passed"
+    },
+    {
+      "name": "wrong chain offers exact add-chain fallback and recovers",
+      "status": "passed"
+    },
+    {
+      "name": "approval stays pending through receipt; stake relocks all; claim stays available",
+      "status": "passed"
+    },
+    {
+      "name": "withdraw and exit return principal and earned rewards",
+      "status": "passed"
+    },
+    {
+      "name": "funding validates minimum, consent, exact approval and separate contribution",
+      "status": "passed"
+    },
+    {
+      "name": "wallet rejection, simulated revert and reverted receipt never report success",
+      "status": "passed"
+    },
+    {
+      "name": "native buy quotes without signing; swap carries exact pool and ETH value",
+      "status": "passed"
+    },
+    {
+      "name": "token sell requires two distinct approvals and then a zero-value swap",
+      "status": "passed"
+    },
+    {
+      "name": "failed and dust quotes cannot submit a swap",
+      "status": "passed"
+    },
+    {
+      "name": "quote expiry, slippage validation, input and account changes invalidate quotes",
+      "status": "passed"
+    },
+    {
+      "name": "RPC failure and empty code fail closed, refresh restores controls",
+      "status": "passed"
+    },
+    {
+      "name": "unmocked browser public-RPC reads and production resources",
+      "status": "passed"
+    }
+  ],
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "scroll": 1440,
+      "viewport": 1440
+    },
+    {
+      "width": 768,
+      "height": 1000,
+      "scroll": 768,
+      "viewport": 768
+    },
+    {
+      "width": 390,
+      "height": 1000,
+      "scroll": 390,
+      "viewport": 390
+    },
+    {
+      "width": 320,
+      "height": 1000,
+      "scroll": 320,
+      "viewport": 320
+    }
+  ],
+  "consoleErrors": [],
+  "resourceFailures": [],
+  "axe": [
+    {
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "width": 768,
+      "violations": []
+    },
+    {
+      "width": 390,
+      "violations": []
+    },
+    {
+      "width": 320,
+      "violations": []
+    },
+    {
+      "state": "connected swap quote",
+      "violations": []
+    }
+  ],
+  "contrast": [
+    {
+      "pair": "body on page",
+      "ratio": 10.765363325992473
+    },
+    {
+      "pair": "muted on position surface",
+      "ratio": 5.011577977065748
+    },
+    {
+      "pair": "primary button",
+      "ratio": 9.330625058367161
+    }
+  ],
+  "computedColors": [
+    {
+      "selector": "body",
+      "color": "rgb(36, 60, 51)",
+      "background": "rgb(245, 244, 237)"
+    },
+    {
+      "selector": ".position-panel",
+      "color": "rgb(36, 60, 51)",
+      "background": "rgb(238, 238, 227)"
+    },
+    {
+      "selector": ".primary",
+      "color": "rgb(255, 254, 249)",
+      "background": "rgb(23, 79, 64)"
+    },
+    {
+      "selector": ".muted",
+      "color": "rgb(91, 104, 94)",
+      "background": "rgb(255, 254, 249)"
+    },
+    {
+      "selector": ".context-box",
+      "color": "rgb(36, 60, 51)",
+      "background": "rgb(238, 238, 227)"
+    }
+  ],
+  "liveReadText": "Live from block 11,820,244 · 0s ago\nRefresh data ↻"
+}
